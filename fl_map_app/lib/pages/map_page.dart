@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:fl_map_app/city_district.dart';
+
+import '../db_helper.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -11,11 +14,17 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   LatLng? selectedPoint;
 
-  // Yeni fonksiyon oluştur
   void _onRegisterButtonPressed() {
     if (selectedPoint != null) {
-      _showDialogForTextEntry(
-          context, selectedPoint!.latitude, selectedPoint!.longitude);
+      getCityAndDistrict(selectedPoint!.latitude, selectedPoint!.longitude)
+          .then((result) {
+        String city = result['city'] ?? '';
+        String district = result['district'] ?? '';
+        _showDialogForTextEntry(context, selectedPoint!.latitude,
+            selectedPoint!.longitude, city, district);
+      }).catchError((e) {
+        print('Hata: $e');
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -83,35 +92,29 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
-void _showDialogForTextEntry(BuildContext context, double lat, double lng) {
+void _showDialogForTextEntry(BuildContext context, double lat, double lng,
+    String city, String district) {
   String? enteredText;
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
         title: Text("Konumu hatırlamak için anahtar kelime giriniz\n"),
-        // content: TextField(
-        //   onChanged: (value) {
-        //     enteredText = value;
-        //   },
-        //   decoration: InputDecoration(
-        //     hintText: "Ahatar kelime",
-        //   ),
-        // ),
-
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Latitude: $lat"),
             Text("Longitude: $lng"),
-            SizedBox(height: 16), // Araya boşluk ekleyebilirsiniz
+            Text("City: $city"),
+            Text("District: $district"),
+            SizedBox(height: 16),
             TextField(
               onChanged: (value) {
                 enteredText = value;
               },
               decoration: InputDecoration(
-                hintText: "Anahtar kelime",
+                hintText: "Anahtar kelime(GİRİLMELİ)",
               ),
             ),
           ],
@@ -121,15 +124,77 @@ void _showDialogForTextEntry(BuildContext context, double lat, double lng) {
             onPressed: () {
               Navigator.pop(context); // Pencereyi kapat
             },
+            style: ButtonStyle(
+              backgroundColor: MaterialStateProperty.all<Color>(Colors.white),
+            ),
             child: Text("Kaydetmeden çık"),
           ),
           TextButton(
             onPressed: () {
               if (enteredText != null && enteredText!.isNotEmpty) {
                 print("Entered text: $enteredText");
+                LocationData locationData = LocationData(
+                  city: city,
+                  district: district,
+                  name: enteredText,
+                  latitude: lat,
+                  longitude: lng,
+                );
+                instance.insert(locationData).then(
+                  (insertedId) {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: Text('Veri Eklendi'),
+                          content: Text('Veri başarıyla eklendi.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(
+                                    context); // Diyalog kutusunu kapat
+                                Navigator.pop(context); // Ana sayfaya dön
+                              },
+                              child: Text('Tamam'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ).catchError(
+                  (error) {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: Text('Hata'),
+                          content:
+                              Text('Veri eklenirken bir hata oluştu: $error'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(
+                                    context); // Diyalog kutusunu kapat
+                              },
+                              child: Text('Tamam'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                );
+                Navigator.pop(context); // Pencereyi kapat
               }
-              Navigator.pop(context); // Pencereyi kapat
             },
+            style: ButtonStyle(
+              backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                (Set<MaterialState> states) {
+                  return Colors.white;
+                },
+              ),
+            ),
             child: Text("Kaydet"),
           ),
         ],
